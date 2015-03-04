@@ -111,7 +111,7 @@ def restore_backup(args):
 
     target_hosts = args.target_hosts.split(',')
 
-    worker.restore(args.keyspace, args.table, hosts, target_hosts)
+    worker.restore(args.keyspace, args.table, hosts, target_hosts, args.download_only)
 
 
 def main():
@@ -185,8 +185,13 @@ def main():
                                 default='',
                                 help='Comma separated list of hosts to restore from; leave empty for all')
     restore_parser.add_argument('--target-hosts',
-                                required=True,
-                                help="The comma separated list of hosts to restore into")
+                                default='127.0.0.1',
+                                help="The comma separated list of hosts to restore into. Default to localhost")
+    restore_parser.add_argument('--download-only', 
+                             dest='download_only',
+                             default=False,
+                             action='store_true',
+                             help='Only download snapshot to restore')
 
     args = base_parser.parse_args()
     subcommand = args.subcommand

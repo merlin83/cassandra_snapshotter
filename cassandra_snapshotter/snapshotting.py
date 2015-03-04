@@ -100,7 +100,7 @@ class RestoreWorker(object):
         self.snapshot = snapshot
         self.keyspace_table_matcher = None
 
-    def restore(self, keyspace, table, hosts, target_hosts):
+    def restore(self, keyspace, table, hosts, target_hosts, download_only=False):
         # TODO:
         # 4. sstableloader
 
@@ -140,6 +140,9 @@ class RestoreWorker(object):
         self._download_keys(keys, total_size)
 
         logging.info("Finished downloading...")
+
+        if download_only:
+            sys.exit()
 
         self._run_sstableloader(keyspace, tables, target_hosts)
 
