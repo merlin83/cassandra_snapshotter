@@ -256,7 +256,7 @@ class BackupWorker(object):
         )
         sudo(cmd)
 
-        upload_command = "cassandra-snapshotter-agent %(incremental_backups)s put --aws-access-key-id=%(key)s --aws-secret-access-key=%(secret)s --s3-bucket-name=%(bucket)s --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s --s3-base-path=%(prefix)s --manifest=%(manifest)s --concurrency=4"
+        upload_command = "cassandra-snapshotter-agent %(incremental_backups)s put --aws-access-key-id=%(key)s --aws-secret-access-key=%(secret)s --s3-bucket-name=%(bucket)s --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s --s3-base-path=%(prefix)s --manifest=%(manifest)s --concurrency=16"
         cmd = upload_command % dict(
             bucket=snapshot.s3_bucket,
             s3_bucket_region=self.s3_bucket_region,
