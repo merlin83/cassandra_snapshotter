@@ -147,7 +147,7 @@ def get_data_path(conf_path):
     data_paths = cassandra_configs['data_file_directories']
     return data_paths
 
-def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, manifest_path, incremental_backups=False):
+def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, conf_path, manifest_path, incremental_backups=False):
     if snapshot_keyspaces:
         keyspace_globs = snapshot_keyspaces.split()
     else:
@@ -217,6 +217,7 @@ def main():
             args.snapshot_name,
             args.snapshot_keyspaces,
             args.snapshot_table,
+            args.conf_path,
             args.manifest_path,
             args.incremental_backups
         )
@@ -234,12 +235,6 @@ def main():
             args.concurrency,
             args.incremental_backups
         )
-
-    if subcommand == 'get_data_path':
-        get_data_path(
-        args.conf_path
-        )
-
 
 if __name__ == '__main__':
     main()
