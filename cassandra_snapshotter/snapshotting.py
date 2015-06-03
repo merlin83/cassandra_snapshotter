@@ -255,7 +255,7 @@ class BackupWorker(object):
             snapshot_name=snapshot.name,
             snapshot_keyspaces=snapshot.keyspaces,
             snapshot_table=snapshot.table,
-            data_path=self.cassandra_conf_path,
+            conf_path=self.cassandra_conf_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
         sudo(cmd)
