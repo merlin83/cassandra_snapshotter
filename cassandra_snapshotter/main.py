@@ -136,9 +136,9 @@ def main():
                                default='',
                                help='The table (column family) to backup')
 
-    backup_parser.add_argument('--cassandra-data-path',
-                               default='/var/lib/cassandra/data/',
-                               help='cassandra data path.')
+    backup_parser.add_argument('--cassandra-conf-path',
+                               default='/etc/cassandra/conf/',
+                               help='cassandra config file path.')
 
     backup_parser.add_argument('--nodetool-path',
                                default=None,

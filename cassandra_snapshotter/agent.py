@@ -136,10 +136,11 @@ def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
             os.remove(f)
 
 
-def get_data_path(config_path='/etc/cassandra/conf/cassandra.yaml'):
+def get_data_path(conf_path):
     '''
     Retrieve cassandra data_file_directories from cassandra.yaml
     '''
+    config_file_path = os.path.join(conf_path,'cassandra.yaml')
     cassandra_configs = {}
     with open(config_path, 'r') as f:
         cassandra_configs = yaml.load(f)
@@ -205,7 +206,7 @@ def main():
     manifest_parser.add_argument('--snapshot_name', required=True, type=str)
     manifest_parser.add_argument('--snapshot_keyspaces', default='', required=False, type=str)
     manifest_parser.add_argument('--snapshot_table', required=False, default='', type=str)
-    manifest_parser.add_argument('--data_paths', required=True, type=str)
+    manifest_parser.add_argument('--conf_path', required=True, type=str)
     manifest_parser.add_argument('--manifest_path', required=True, type=str)
 
     args = base_parser.parse_args()
@@ -233,6 +234,12 @@ def main():
             args.concurrency,
             args.incremental_backups
         )
+
+    if subcommand == 'get_data_path':
+        get_data_path(
+        args.conf_path
+        )
+
 
 if __name__ == '__main__':
     main()
