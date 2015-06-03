@@ -10,6 +10,7 @@ from multiprocessing.dummy import Pool
 import os
 import subprocess
 import time
+import yaml
 from timeout import timeout
 from utils import add_s3_arguments
 from utils import base_parser
@@ -135,7 +136,17 @@ def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
             os.remove(f)
 
 
-def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, data_paths, manifest_path, incremental_backups=False):
+def get_data_path(config_path='/etc/cassandra/conf/cassandra.yaml'):
+    '''
+    Retrieve cassandra data_file_directories from cassandra.yaml
+    '''
+    cassandra_configs = {}
+    with open(config_path, 'r') as f:
+        cassandra_configs = yaml.load(f)
+    data_paths = cassandra_configs['data_file_directories']
+    return data_paths
+
+def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, manifest_path, incremental_backups=False):
     if snapshot_keyspaces:
         keyspace_globs = snapshot_keyspaces.split()
     else:
@@ -146,6 +157,7 @@ def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, da
     else:
         table_glob = '*'
 
+    data_paths = get_data_path()
     files = []
     for data_path in data_paths.split(','):
         print "processing {}".format(data_path)
