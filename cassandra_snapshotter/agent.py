@@ -158,7 +158,7 @@ def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, ma
     else:
         table_glob = '*'
 
-    data_paths = get_data_path()
+    data_paths = get_data_path(conf_path)
     files = []
     for data_path in data_paths:
         print "processing {}".format(data_path)
