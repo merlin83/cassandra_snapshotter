@@ -142,7 +142,7 @@ def get_data_path(conf_path):
     '''
     config_file_path = os.path.join(conf_path,'cassandra.yaml')
     cassandra_configs = {}
-    with open(config_path, 'r') as f:
+    with open(config_file_path, 'r') as f:
         cassandra_configs = yaml.load(f)
     data_paths = cassandra_configs['data_file_directories']
     return data_paths
