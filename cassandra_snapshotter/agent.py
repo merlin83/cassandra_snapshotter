@@ -161,8 +161,6 @@ def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, co
     data_paths = get_data_path(conf_path)
     files = []
     for data_path in data_paths:
-        print "processing {}".format(data_path)
-        logger.warning("Log!processing {}".format(data_path))
         for keyspace_glob in keyspace_globs:
             path = [
                 data_path,
