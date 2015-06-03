@@ -216,7 +216,6 @@ def main():
             args.snapshot_name,
             args.snapshot_keyspaces,
             args.snapshot_table,
-            args.data_paths,
             args.manifest_path,
             args.incremental_backups
         )
