@@ -3,6 +3,12 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
+from yaml import load
+try:
+    # LibYAML based parser and emitter
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
 import glob
 import logging
 import multiprocessing
@@ -10,7 +16,6 @@ from multiprocessing.dummy import Pool
 import os
 import subprocess
 import time
-import yaml
 from timeout import timeout
 from utils import add_s3_arguments
 from utils import base_parser
@@ -143,7 +148,7 @@ def get_data_path(conf_path):
     config_file_path = os.path.join(conf_path,'cassandra.yaml')
     cassandra_configs = {}
     with open(config_file_path, 'r') as f:
-        cassandra_configs = yaml.load(f)
+        cassandra_configs = load(f, Loader=Loader)
     data_paths = cassandra_configs['data_file_directories']
     return data_paths
 
