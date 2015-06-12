@@ -13,6 +13,7 @@ import os
 import time
 import sys
 
+env.user = 'cassandra'
 
 class Snapshot(object):
     """
