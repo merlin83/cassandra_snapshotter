@@ -10,11 +10,10 @@ from utils import get_s3_connection_host
 
 
 env.use_ssh_config = True
-env.user = 'cassandra'
 
 def run_backup(args):
-    #if args.user:
-    #    env.user = args.user
+    if args.user:
+        env.user = args.user
 
     #if args.password:
     #    env.password = args.password
