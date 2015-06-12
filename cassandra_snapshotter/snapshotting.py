@@ -258,7 +258,7 @@ class BackupWorker(object):
             conf_path=self.cassandra_conf_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        sudo(cmd)
+        run(cmd)
 
         upload_command = "cassandra-snapshotter-agent %(incremental_backups)s \
             put \
@@ -279,7 +279,7 @@ class BackupWorker(object):
             manifest=manifest_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        sudo(cmd)
+        run(cmd)
 
     def snapshot(self, snapshot):
         """
@@ -310,7 +310,7 @@ class BackupWorker(object):
     def get_ring_description(self):
         with settings(host_string=env.hosts[0]):
             with hide('output'):
-                ring_description = sudo(self.nodetool_path + ' ring')
+                ring_description = run(self.nodetool_path + ' ring')
         return ring_description
 
     def get_keyspace_schema(self, keyspace=None):
@@ -320,7 +320,7 @@ class BackupWorker(object):
                 cmd = "echo -e 'show schema;\n' | %s" % (self.cassandra_cli_path)
                 if keyspace:
                     cmd = "echo -e 'show schema;\n' | %s -k %s" % (self.cassandra_cli_path, keyspace)
-                output = sudo(cmd)
+                output = run(cmd)
         schema = '\n'.join([l for l in output.split("\n") if re.match(r'(create|use| )',l)])
         return schema
 
@@ -382,7 +382,7 @@ class BackupWorker(object):
         )
 
         with hide('running', 'stdout', 'stderr'):
-            sudo(cmd)
+            run(cmd)
 
     def upload_cluster_backups(self, snapshot, incremental_backups):
         logging.info('Uploading backups')
@@ -403,7 +403,7 @@ class BackupWorker(object):
             nodetool=self.nodetool_path,
             snapshot=snapshot.name
         )
-        sudo(cmd)
+        run(cmd)
 
 
 class SnapshotCollection(object):
