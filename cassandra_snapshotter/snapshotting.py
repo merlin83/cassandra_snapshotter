@@ -102,8 +102,13 @@ class RestoreWorker(object):
 
         logging.info("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
                                                                                table=table))
+        print("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
+                                                                               table=table))
 
         logging.info("From hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
+                                                                         target_hosts=', '.join(
+                                                                             target_hosts)))
+        print("From hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
                                                                          target_hosts=', '.join(
                                                                              target_hosts)))
         if not table:
@@ -132,12 +137,15 @@ class RestoreWorker(object):
         logging.info("Found %(files_count)d files, with total size of %(size)s." % dict(
             files_count=len(keys),
             size=self._human_size(total_size)))
+        print("Found %(files_count)d files, with total size of %(size)s." % dict(
+            files_count=len(keys),
+            size=self._human_size(total_size)))
 
         self._download_keys(keys, total_size)
 
         logging.info("Finished downloading...")
 
-        self._run_sstableloader(keyspace, tables, target_hosts)
+        #self._run_sstableloader(keyspace, tables, target_hosts)
 
     def _delete_old_dir_and_create_new(self, keyspace, tables):
         keyspace_path = './%s' % keyspace
