@@ -14,7 +14,7 @@ Both the machine that runs the backup and the Cassandra nodes need to install th
 ``` bash
 $ git clone https://github.com/kikinteractive/cassandra_snapshotter.git
 $ cd cassandra_snapshotter
-# sudo pip install -e ./
+$ sudo pip install -e ./
 ```
 
 Nodes in the cluster also need to have lzop installed so that backups on S3 can be archived compressed
@@ -22,7 +22,7 @@ Nodes in the cluster also need to have lzop installed so that backups on S3 can 
 You can install it on Debian/Ubuntu via apt-get
 
 ``` bash
-# sudo yum install lzop
+$ sudo yum install lzop
 ```
 
 Make sure you have JNA enabled and (if you want to use them) that incremental backups are enabled in your cassandra config file.
@@ -36,7 +36,7 @@ You can see the list of parameters available via `cassandra-snapshotter --help`
 
 
 ``` bash
-cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path="mycluster-backup" --s3-ssenc --hosts=h1,h2,h3,h4 --user=cassandra
+$ cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path="mycluster-backup" --s3-ssenc --hosts=h1,h2,h3,h4 --user=cassandra
 ```
 
 
@@ -48,7 +48,7 @@ cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucke
 ####List existing backups for *mycluster*:####
 
 ``` bash
-cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path=mycluster list
+$ cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path=mycluster list
 ```
 
 ####Restore backups for *mycluster*:####
