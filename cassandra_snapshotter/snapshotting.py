@@ -102,13 +102,7 @@ class RestoreWorker(object):
 
         logging.info("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
                                                                                table=table))
-        print("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
-                                                                               table=table))
-
         logging.info("From hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
-                                                                         target_hosts=', '.join(
-                                                                             target_hosts)))
-        print("From hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
                                                                          target_hosts=', '.join(
                                                                              target_hosts)))
         if not table:
