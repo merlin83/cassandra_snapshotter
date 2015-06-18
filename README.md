@@ -12,7 +12,9 @@ How to install
 Both the machine that runs the backup and the Cassandra nodes need to install the tool
 
 ``` bash
-pip install cassandra_snapshotter
+$ git clone https://github.com/kikinteractive/cassandra_snapshotter.git
+$ cd cassandra_snapshotter
+$ sudo pip install -e ./
 ```
 
 Nodes in the cluster also need to have lzop installed so that backups on S3 can be archived compressed
@@ -20,7 +22,7 @@ Nodes in the cluster also need to have lzop installed so that backups on S3 can 
 You can install it on Debian/Ubuntu via apt-get
 
 ``` bash
-apt-get install lzop
+$ sudo yum install lzop
 ```
 
 Make sure you have JNA enabled and (if you want to use them) that incremental backups are enabled in your cassandra config file.
@@ -34,21 +36,28 @@ You can see the list of parameters available via `cassandra-snapshotter --help`
 
 
 ``` bash
-cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-bucket-region=eu-west-1 --s3-ssenc --s3-base-path=mycluster backup --hosts=h1,h2,h3,h4 --user=cassandra
+$ cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path="mycluster-backup" --s3-ssenc --hosts=h1,h2,h3,h4 --user=cassandra
 ```
 
 
 - connects via ssh to hosts h1,h2,h3,h4 using user cassandra
 - backups up (using snapshots or incremental backups) on the S3 bucket Z
-- backups are stored in /mycluster/
-- if your bucket is in other then us-west-1 region, you should really specify the region in the command line; otherwise weird 'connection reset by peer' errors can appear as you'll be transferring files through us-west-1 over to eg. eu-west-1
+- backups are stored in /mycluster-backup/
 - if you wish to use AWS S3 server-side encryption specify ```--s3-ssenc```
 
 ####List existing backups for *mycluster*:####
 
 ``` bash
-cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-bucket-region=eu-west-1 --s3-ssenc --s3-base-path=mycluster list
+$ cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path=mycluster list
 ```
+
+####Restore backups for *mycluster*:####
+* Log into hostB, assume you want to restore hostA's data on hostB
+* Run the following command, all sstables will be download into ./K/cfs
+```bash
+$ cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path='mycluster' restore  --keyspace=K --hosts=hostA --target-hosts=hostB
+```
+
 
 ###How it works###
 
@@ -72,7 +81,7 @@ This parameter is used to make it possible to use for a single S3 bucket to stor
 This parameter can be also seen as a backup profile identifier; the snapshotter uses the s3_base_path to search for existing snapshots on your S3 bucket.
 
 
-###INCREMENTAL BACKUPS###
+###Incremental Backups###
 
 Incremental backups are created only when a snapshot already exists, incremental backups are stored in their parent snapshot path.
 
@@ -89,7 +98,7 @@ In order to take advantage of incremental backups you need to configure your cas
 __NOTE:__ Incremental backups are not enabled by default on cassandra.
 
 
-###CREATE NEW SNAPSHOT###
+###Create new snapshot###
 
 If you dont want to use incremental backups, or if for some reason you want to create a new snapshot for your data, run the cassandra_snapshotter with the `--new-snapshot` argument.
 
