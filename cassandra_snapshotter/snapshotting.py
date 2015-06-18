@@ -277,8 +277,7 @@ class BackupWorker(object):
             manifest=manifest_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        #sudo(cmd)
-        run(cmd)
+        sudo(cmd)
 
     def snapshot(self, snapshot):
         """
