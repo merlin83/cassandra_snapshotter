@@ -319,6 +319,7 @@ class BackupWorker(object):
                 if keyspace:
                     cmd = "echo -e 'show schema;\n' | %s -k %s" % (self.cassandra_cli_path, keyspace)
                 output = sudo(cmd)
+        logging.info("show schema cmd is {0}".format(cmd))
         schema = '\n'.join([l for l in output.split("\n") if re.match(r'(create|use| )',l)])
         return schema
 
