@@ -256,7 +256,7 @@ class BackupWorker(object):
             conf_path=self.cassandra_conf_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        run(cmd)
+        sudo(cmd)
 
         upload_command = "cassandra-snapshotter-agent %(incremental_backups)s \
             put \
