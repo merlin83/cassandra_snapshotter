@@ -1,25 +1,22 @@
 from collections import defaultdict
 from fabric.api import env
 import logging
-from snapshotting import BackupWorker, RestoreWorker
-from snapshotting import Snapshot
-from snapshotting import SnapshotCollection
-from utils import add_s3_arguments
+from snapshotting import (BackupWorker, RestoreWorker, Snapshot, SnapshotCollection)
+from utils import (add_s3_arguments, get_s3_connection_host)
 from utils import base_parser as _base_parser
-from utils import get_s3_connection_host
 
 
 env.use_ssh_config = True
 
 def run_backup(args):
-    #if args.user:
-    #    env.user = args.user
+    if args.user:
+        env.user = args.user
 
-    #if args.password:
-    #    env.password = args.password
+    if args.password:
+        env.password = args.password
 
-    #if args.sshport:
-    #    env.port = args.sshport
+    if args.sshport:
+        env.port = args.sshport
 
     env.hosts = args.hosts.split(',')
 
@@ -123,6 +120,9 @@ def main():
     backup_parser = subparsers.add_parser('backup', help='create a snapshot')
 
     # snapshot / backup arguments
+    backup_parser.add_argument('--buffer-size'
+                               default=64,
+                               help='The default buffer size (MB) for compress and upload')
     backup_parser.add_argument('--hosts',
                                required=True,
                                help='The comma separated list of hosts to snapshot')
