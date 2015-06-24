@@ -24,8 +24,7 @@ from utils import get_s3_connection_host
 
 
 DEFAULT_CONCURRENCY = max(multiprocessing.cpu_count() - 1, 1)
-#BUFFER_SIZE = 62914560
-BUFFER_SIZE = 64
+BUFFER_SIZE = 64         # Default bufsize is 64M
 MBFACTOR = float(1<<20)
 LZOP_BIN = 'lzop'
 MAX_RETRY_COUNT = 3
@@ -50,7 +49,6 @@ def compressed_pipe(path, size):
     compression is done with lzop
 
     """
-    print("+++++++++++++++++++++++size is {0}".format(size))
     lzop = subprocess.Popen(
         (LZOP_BIN, '--stdout', path),
         bufsize=size,
@@ -134,6 +132,7 @@ def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
     bucket = get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host)
     manifest_fp = open(manifest, 'r')
     bufsize = int(bufsize * MBFACTOR)
+    print("++++++++++++++++++++bufsize is {0}".format(bufsize))
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
     for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, bufsize) for f in files)):
