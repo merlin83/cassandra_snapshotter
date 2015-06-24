@@ -133,7 +133,7 @@ def put_from_manifest(
     '''
     bucket = get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host)
     manifest_fp = open(manifest, 'r')
-    print("++++++++++++++++++++bufsize is {0}".format(bufsize))
+#    print("++++++++++++++++++++bufsize is {0}".format(bufsize))
     print("++++++++++++++++++++MBFACTOR is {0}".format(MBFACTOR))
     buffer_size = int(bufsize * MBFACTOR)
     print("++++++++++++++++++++buffersize is {0}".format(buffer_size))
@@ -240,6 +240,7 @@ def main():
         )
 
     if subcommand == 'put':
+        print(">>>>>>>>>>>>>>>>>>>>>>bufsize is {0}".format(arg.bufsize))
         check_lzop()
         put_from_manifest(
             args.s3_bucket_name,
