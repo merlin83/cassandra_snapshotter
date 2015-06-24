@@ -121,8 +121,10 @@ def cancel_upload(bucket, mp, remote_path):
             logger.exception("Error while cancelling multipart upload")
 
 
-def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
-    aws_access_key_id, aws_secret_access_key, manifest, bufsize, concurrency=None, incremental_backups=False):
+def put_from_manifest(
+        s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
+        aws_access_key_id, aws_secret_access_key, manifest,
+        bufsize, concurrency=None, incremental_backups=False):
     '''
     uploads files listed in a manifest to amazon S3
     to support larger than 5GB files multipart upload is used (chunks of 60MB)
@@ -131,11 +133,11 @@ def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
     '''
     bucket = get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host)
     manifest_fp = open(manifest, 'r')
-    bufsize = int(bufsize * MBFACTOR)
-    print("++++++++++++++++++++bufsize is {0}".format(bufsize))
+    buffer_size = int(bufsize * MBFACTOR)
+    print("++++++++++++++++++++bufsize is {0}".format(buffer_size))
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
-    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, bufsize) for f in files)):
+    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, buffer_size) for f in files)):
         pass
     pool.terminate()
 
@@ -204,6 +206,7 @@ def main():
                            default=BUFFER_SIZE,
                            type=int,
                            help='Compress and upload buffer size')
+
     put_parser.add_argument('--manifest',
                            required=True,
                            help='The manifest containing the files to put on s3')

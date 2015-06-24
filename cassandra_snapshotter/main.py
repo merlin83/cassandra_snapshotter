@@ -123,6 +123,7 @@ def main():
     backup_parser.add_argument('--buffer-size',
                                default=64,
                                help='The default buffer size (MB) for compress and upload')
+
     backup_parser.add_argument('--hosts',
                                required=True,
                                help='The comma separated list of hosts to snapshot')
