@@ -139,7 +139,7 @@ def put_from_manifest(
     print("++++++++++++++++++++buffersize is {0}".format(buffer_size))
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
-    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, bufsize) for f in files)):
+    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, buffer_size) for f in files)):
         pass
     pool.terminate()
 
