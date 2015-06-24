@@ -56,7 +56,7 @@ def compressed_pipe(path, size):
     )
 
     while True:
-        chunk = lzop.stdout.read(BUFFER_SIZE)
+        chunk = lzop.stdout.read(size)
         if not chunk:
             break
         yield StringIO(chunk)
