@@ -240,7 +240,7 @@ def main():
         )
 
     if subcommand == 'put':
-        print(">>>>>>>>>>>>>>>>>>>>>>bufsize is {0}".format(arg.bufsize))
+        print(">>>>>>>>>>>>>>>>>>>>>>bufsize is {0}".format(args.bufsize))
         check_lzop()
         put_from_manifest(
             args.s3_bucket_name,
