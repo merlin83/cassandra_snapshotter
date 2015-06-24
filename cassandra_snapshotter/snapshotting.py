@@ -232,6 +232,7 @@ class BackupWorker(object):
         self.cassandra_cli_path = "%s/cassandra-cli" % cassandra_bin_dir
         self.backup_schema = backup_schema
         self.connection_pool_size = connection_pool_size
+        self.buffer_size = buffer_size
 
     def get_current_node_hostname(self):
         return env.host_string
@@ -266,6 +267,7 @@ class BackupWorker(object):
             --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s \
             --s3-base-path=%(prefix)s \
             --manifest=%(manifest)s \
+            --bufsize=%(bufsize)s \
             --concurrency=4"
         cmd = upload_command % dict(
             bucket=snapshot.s3_bucket,
@@ -275,6 +277,7 @@ class BackupWorker(object):
             key=self.aws_access_key_id,
             secret=self.aws_secret_access_key,
             manifest=manifest_path,
+            bufsize=self.buffer_size,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
         run(cmd)
