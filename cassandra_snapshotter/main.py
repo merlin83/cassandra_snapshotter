@@ -120,7 +120,7 @@ def main():
     backup_parser = subparsers.add_parser('backup', help='create a snapshot')
 
     # snapshot / backup arguments
-    backup_parser.add_argument('--buffer-size'
+    backup_parser.add_argument('--buffer-size',
                                default=64,
                                help='The default buffer size (MB) for compress and upload')
     backup_parser.add_argument('--hosts',
