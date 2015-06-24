@@ -221,7 +221,7 @@ class BackupWorker(object):
                  aws_access_key_id, s3_bucket_region, s3_ssenc,
                  s3_connection_host, cassandra_conf_path,
                  nodetool_path, cassandra_bin_dir, backup_schema,
-                 connection_pool_size=12):
+                 buffer_size, connection_pool_size=12):
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_access_key_id = aws_access_key_id
         self.s3_bucket_region = s3_bucket_region

@@ -45,6 +45,7 @@ def run_backup(args):
         nodetool_path=args.nodetool_path,
         cassandra_bin_dir=args.cassandra_bin_dir,
         backup_schema=args.backup_schema,
+        buffer_size=args.buffer_size,
         connection_pool_size=args.connection_pool_size
     )
 
