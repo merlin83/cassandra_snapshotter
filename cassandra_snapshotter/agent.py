@@ -24,7 +24,8 @@ from utils import get_s3_connection_host
 
 
 DEFAULT_CONCURRENCY = max(multiprocessing.cpu_count() - 1, 1)
-BUFFER_SIZE = 62914560
+#BUFFER_SIZE = 62914560
+BUFFER_SIZE = 64
 MBFACTOR = float(1<<20)
 LZOP_BIN = 'lzop'
 MAX_RETRY_COUNT = 3
@@ -41,7 +42,7 @@ def check_lzop():
         print "%s not found on path" % LZOP_BIN
 
 
-def compressed_pipe(path):
+def compressed_pipe(path, size):
     """
     returns a generator that yields compressed chunks of
     the given file_path
@@ -49,9 +50,10 @@ def compressed_pipe(path):
     compression is done with lzop
 
     """
+    print("+++++++++++++++++++++++size is {0}".format(size))
     lzop = subprocess.Popen(
         (LZOP_BIN, '--stdout', path),
-        bufsize=BUFFER_SIZE,
+        bufsize=size,
         stdout=subprocess.PIPE
     )
 
@@ -77,13 +79,13 @@ def destination_path(s3_base_path, file_path, compressed=True):
 
 
 @map_wrap
-def upload_file(bucket, source, destination, s3_ssenc):
+def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     completed = False
     retry_count = 0
     while not completed and retry_count < MAX_RETRY_COUNT:
         mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
         try:
-            for i, chunk in enumerate(compressed_pipe(source)):
+            for i, chunk in enumerate(compressed_pipe(source, bufsize)):
                 mp.upload_part_from_file(chunk, i+1)
         except Exception:
             logger.warn("Error uploading file %s to %s. Retry count: %d" % (source, destination, retry_count))
@@ -132,10 +134,9 @@ def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
     bucket = get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host)
     manifest_fp = open(manifest, 'r')
     bufsize = int(bufsize * MBFACTOR)
-    print("*****************bufsize is {0}".format(bufsize))
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
-    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc) for f in files)):
+    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, bufsize) for f in files)):
         pass
     pool.terminate()
 
