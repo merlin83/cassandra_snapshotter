@@ -1,3 +1,6 @@
+from __future__ import (absolute_import, print_function)
+
+# From system
 from boto.s3.connection import S3Connection
 try:
     from cStringIO import StringIO
@@ -17,10 +20,10 @@ import os
 import subprocess
 import time
 from timeout import timeout
-from utils import add_s3_arguments
-from utils import base_parser
-from utils import map_wrap
-from utils import get_s3_connection_host
+
+# From package
+from utils import (add_s3_arguments, base_parser,\
+    map_wrap, get_s3_connection_host)
 
 
 DEFAULT_CONCURRENCY = max(multiprocessing.cpu_count() - 1, 1)
@@ -38,12 +41,12 @@ def check_lzop():
     try:
         subprocess.call([LZOP_BIN, '--version'])
     except OSError:
-        print "%s not found on path" % LZOP_BIN
+        print("{!s} not found on path".format(LZOP_BIN))
 
 
 def compressed_pipe(path, size):
     """
-    returns a generator that yields compressed chunks of
+    Returns a generator that yields compressed chunks of
     the given file_path
 
     compression is done with lzop
@@ -62,7 +65,9 @@ def compressed_pipe(path, size):
         yield StringIO(chunk)
 
 
-def get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host):
+def get_bucket(
+        s3_bucket, aws_access_key_id,
+        aws_secret_access_key, s3_connection_host):
     connection = S3Connection(
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
@@ -86,7 +91,8 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
             for i, chunk in enumerate(compressed_pipe(source, bufsize)):
                 mp.upload_part_from_file(chunk, i+1)
         except Exception:
-            logger.warn("Error uploading file %s to %s. Retry count: %d" % (source, destination, retry_count))
+            logger.warn("Error uploading file {!s} to {!s}.\
+                Retry count: {}".format(source, destination, retry_count))
             cancel_upload(bucket, mp, destination)
             retry_count = retry_count + 1
             if retry_count >= MAX_RETRY_COUNT:
@@ -102,12 +108,11 @@ def upload_chunk(mp, chunk, index):
 
 
 def cancel_upload(bucket, mp, remote_path):
-    '''
-    safe way to cancel a multipart upload
+    """
+    Safe way to cancel a multipart upload
     sleeps SLEEP_TIME seconds and then makes sure that there are not parts left
     in storage
-
-    '''
+    """
     while True:
         try:
             time.sleep(SLEEP_TIME)
@@ -125,18 +130,16 @@ def put_from_manifest(
         s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
         aws_access_key_id, aws_secret_access_key, manifest,
         bufsize, concurrency=None, incremental_backups=False):
-    '''
-    uploads files listed in a manifest to amazon S3
+    """
+    Uploads files listed in a manifest to amazon S3
     to support larger than 5GB files multipart upload is used (chunks of 60MB)
     files are uploaded compressed with lzop, the .lzo suffix is appended
-
-    '''
-    bucket = get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host)
+    """
+    bucket = get_bucket(
+        s3_bucket, aws_access_key_id,
+        aws_secret_access_key, s3_connection_host)
     manifest_fp = open(manifest, 'r')
-#    print("++++++++++++++++++++bufsize is {0}".format(bufsize))
-    print("++++++++++++++++++++MBFACTOR is {0}".format(MBFACTOR))
     buffer_size = int(bufsize * MBFACTOR)
-    print("++++++++++++++++++++buffersize is {0}".format(buffer_size))
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
     for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, buffer_size) for f in files)):
@@ -149,17 +152,17 @@ def put_from_manifest(
 
 
 def get_data_path(conf_path):
-    '''
-    Retrieve cassandra data_file_directories from cassandra.yaml
-    '''
-    config_file_path = os.path.join(conf_path,'cassandra.yaml')
+    """Retrieve cassandra data_file_directories from cassandra.yaml"""
+    config_file_path = os.path.join(conf_path, 'cassandra.yaml')
     cassandra_configs = {}
     with open(config_file_path, 'r') as f:
         cassandra_configs = load(f, Loader=Loader)
     data_paths = cassandra_configs['data_file_directories']
     return data_paths
 
-def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, conf_path, manifest_path, incremental_backups=False):
+def create_upload_manifest(
+        snapshot_name, snapshot_keyspaces, snapshot_table,
+        conf_path, manifest_path, incremental_backups=False):
     if snapshot_keyspaces:
         keyspace_globs = snapshot_keyspaces.split()
     else:
@@ -194,37 +197,45 @@ def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, co
 
 
 def main():
-    subparsers = base_parser.add_subparsers(title='subcommands',
-                                       dest='subcommand')
-    base_parser.add_argument('--incremental_backups', action='store_true', default=False)
+    subparsers = base_parser.add_subparsers(
+        title='subcommands', dest='subcommand')
+    base_parser.add_argument(
+        '--incremental_backups', action='store_true', default=False)
 
-    put_parser = subparsers.add_parser('put', help='put files on s3 from a manifest')
-    manifest_parser = subparsers.add_parser('create-upload-manifest', help='put files on s3 from a manifest')
+    put_parser = subparsers.add_parser(
+        'put', help="put files on s3 from a manifest")
+    manifest_parser = subparsers.add_parser(
+        'create-upload-manifest', help="put files on s3 from a manifest")
 
     # put arguments
     put_parser = add_s3_arguments(put_parser)
-    put_parser.add_argument('--bufsize',
-                           required=False,
-                           default=BUFFER_SIZE,
-                           type=int,
-                           help='Compress and upload buffer size')
+    put_parser.add_argument(
+        '--bufsize',
+        required=False,
+        default=BUFFER_SIZE,
+        type=int,
+        help="Compress and upload buffer size")
 
-    put_parser.add_argument('--manifest',
-                           required=True,
-                           help='The manifest containing the files to put on s3')
+    put_parser.add_argument(
+        '--manifest',
+        required=True,
+        help="The manifest containing the files to put on s3")
 
-    put_parser.add_argument('--concurrency',
-                           required=False,
-                           default=DEFAULT_CONCURRENCY,
-                           type=int,
-                           help='Compress and upload concurrent processes')
+    put_parser.add_argument(
+        '--concurrency',
+        required=False,
+        default=DEFAULT_CONCURRENCY,
+        type=int,
+        help="Compress and upload concurrent processes")
 
     # create-upload-manifest arguments
     manifest_parser.add_argument('--snapshot_name', required=True, type=str)
-    manifest_parser.add_argument('--snapshot_keyspaces', default='', required=False, type=str)
-    manifest_parser.add_argument('--snapshot_table', required=False, default='', type=str)
     manifest_parser.add_argument('--conf_path', required=True, type=str)
     manifest_parser.add_argument('--manifest_path', required=True, type=str)
+    manifest_parser.add_argument(
+        '--snapshot_keyspaces', default='', required=False, type=str)
+    manifest_parser.add_argument(
+        '--snapshot_table', required=False, default='', type=str)
 
     args = base_parser.parse_args()
     subcommand = args.subcommand
@@ -240,7 +251,6 @@ def main():
         )
 
     if subcommand == 'put':
-        print(">>>>>>>>>>>>>>>>>>>>>>bufsize is {0}".format(args.bufsize))
         check_lzop()
         put_from_manifest(
             args.s3_bucket_name,
