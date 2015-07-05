@@ -60,7 +60,7 @@ def upload_pipe(path, size, compress):
         )
         stdout = lzop.stdout
     else:
-        stdout = StringIO(open(path, "r"))
+        stdout = open(path, "r")
 
     while True:
         chunk = stdout.read(size)
