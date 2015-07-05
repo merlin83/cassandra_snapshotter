@@ -44,7 +44,7 @@ def check_lzop():
         print("{!s} not found on path".format(LZOP_BIN))
 
 
-def compressed_pipe(path, size):
+def upload_pipe(path, size, compress):
     """
     Returns a generator that yields compressed chunks of
     the given file_path
@@ -52,14 +52,18 @@ def compressed_pipe(path, size):
     compression is done with lzop
 
     """
-    lzop = subprocess.Popen(
-        (LZOP_BIN, '--stdout', path),
-        bufsize=size,
-        stdout=subprocess.PIPE
-    )
+    if compress:
+        lzop = subprocess.Popen(
+            (LZOP_BIN, '--stdout', path),
+            bufsize=size,
+            stdout=subprocess.PIPE
+        )
+        stdout = lzop.stdout
+    else:
+        stdout = StringIO(open(path, "r"))
 
     while True:
-        chunk = lzop.stdout.read(size)
+        chunk = stdout.read(size)
         if not chunk:
             break
         yield StringIO(chunk)
@@ -82,13 +86,13 @@ def destination_path(s3_base_path, file_path, compressed=True):
 
 
 @map_wrap
-def upload_file(bucket, source, destination, s3_ssenc, bufsize):
+def upload_file(bucket, source, destination, s3_ssenc, bufsize, compress):
     completed = False
     retry_count = 0
     while not completed and retry_count < MAX_RETRY_COUNT:
         mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
         try:
-            for i, chunk in enumerate(compressed_pipe(source, bufsize)):
+            for i, chunk in enumerate(upload_pipe(source, bufsize, compress)):
                 mp.upload_part_from_file(chunk, i+1)
         except Exception:
             logger.warn("Error uploading file {!s} to {!s}.\
@@ -129,7 +133,7 @@ def cancel_upload(bucket, mp, remote_path):
 def put_from_manifest(
         s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
         aws_access_key_id, aws_secret_access_key, manifest,
-        bufsize, concurrency=None, incremental_backups=False):
+        bufsize, concurrency=None, incremental_backups=False, compress=False):
     """
     Uploads files listed in a manifest to amazon S3
     to support larger than 5GB files multipart upload is used (chunks of 60MB)
@@ -142,7 +146,7 @@ def put_from_manifest(
     buffer_size = int(bufsize * MBFACTOR)
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
-    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, buffer_size) for f in files)):
+    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f, compress), s3_ssenc, buffer_size, compress) for f in files)):
         pass
     pool.terminate()
 
@@ -228,6 +232,9 @@ def main():
         type=int,
         help="Compress and upload concurrent processes")
 
+    base_parser.add_argument(
+        '--compress', action='store_true', default=False)
+
     # create-upload-manifest arguments
     manifest_parser.add_argument('--snapshot_name', required=True, type=str)
     manifest_parser.add_argument('--conf_path', required=True, type=str)
@@ -251,7 +258,8 @@ def main():
         )
 
     if subcommand == 'put':
-        check_lzop()
+        if args.compress:
+            check_lzop()
         put_from_manifest(
             args.s3_bucket_name,
             get_s3_connection_host(args.s3_bucket_region),
@@ -262,7 +270,8 @@ def main():
             args.manifest,
             args.bufsize,
             args.concurrency,
-            args.incremental_backups
+            args.incremental_backups,
+            args.compress
         )
 
 if __name__ == '__main__':
