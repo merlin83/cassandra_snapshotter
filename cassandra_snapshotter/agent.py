@@ -85,7 +85,7 @@ def destination_path(s3_base_path, file_path, compressed=True):
 def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     completed = False
     retry_count = 0
-    logger.info("File:{0}".format(source))
+    print("File:{0}".format(source))
     while not completed and retry_count < MAX_RETRY_COUNT:
         mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
         try:
