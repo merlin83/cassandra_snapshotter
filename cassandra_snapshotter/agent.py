@@ -143,6 +143,7 @@ def put_from_manifest(
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
     for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, buffer_size) for f in files)):
+        logger.info("{}".format(f))
         pass
     pool.terminate()
 
@@ -177,6 +178,7 @@ def create_upload_manifest(
     files = []
     for data_path in data_paths:
         for keyspace_glob in keyspace_globs:
+            logger.info("Creating data path: {}/{}/{}".format(data_path,keyspace_glob,table_glob))
             path = [
                 data_path,
                 keyspace_glob,
