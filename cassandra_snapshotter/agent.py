@@ -85,6 +85,7 @@ def destination_path(s3_base_path, file_path, compressed=True):
 def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     completed = False
     retry_count = 0
+    logger.info("File:{}".format(source))
     while not completed and retry_count < MAX_RETRY_COUNT:
         mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
         try:
@@ -143,7 +144,6 @@ def put_from_manifest(
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
     for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, buffer_size) for f in files)):
-        logger.info("{}".format(f))
         pass
     pool.terminate()
 
