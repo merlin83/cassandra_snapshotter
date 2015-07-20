@@ -178,7 +178,7 @@ def create_upload_manifest(
     files = []
     for data_path in data_paths:
         for keyspace_glob in keyspace_globs:
-            logger.info("Creating data path: {}/{}/{}".format(data_path,keyspace_glob,table_glob))
+            logger.info("Creating data path: {}/{}".format(data_path,keyspace_glob))
             path = [
                 data_path,
                 keyspace_glob,
