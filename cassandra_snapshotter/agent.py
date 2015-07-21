@@ -94,6 +94,8 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
         except Exception:
             logger.warn("Error uploading file {!s} to {!s}.\
                 Retry count: {}".format(source, destination, retry_count))
+            print("Error uploading file {!s} to {!s}.\
+                Retry count: {}".format(source, destination, retry_count))
             cancel_upload(bucket, mp, destination)
             retry_count = retry_count + 1
             if retry_count >= MAX_RETRY_COUNT:
