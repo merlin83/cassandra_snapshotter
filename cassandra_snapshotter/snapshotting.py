@@ -2,6 +2,7 @@ from __future__ import (absolute_import, print_function)
 
 # From system
 import os
+from os.path import expanduser
 import re
 import sys
 import time
@@ -262,7 +263,7 @@ class BackupWorker(object):
         prefix = '/'.join(snapshot.base_path.split(
             '/') + [self.get_current_node_hostname()])
 
-        manifest_path = '/home/jenkins/backupmanifest'
+        manifest_path = '{}/backupmanifest'.format(expanduser('~'))
         manifest_command = "cassandra-snapshotter-agent \
             %(incremental_backups)s create-upload-manifest \
             --manifest_path=%(manifest_path)s \
