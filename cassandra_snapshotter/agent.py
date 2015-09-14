@@ -14,6 +14,7 @@ try:
 except ImportError:
     from yaml import Loader
 import os
+import sys
 import time
 import glob
 import logging
@@ -82,6 +83,9 @@ def destination_path(s3_base_path, file_path, compressed=True):
     suffix = compressed and '.lzo' or ''
     return '/'.join([s3_base_path, file_path + suffix])
 
+def percent_cb(complete, total):
+    sys.stdout.write('.')
+    sys.stdout.flush()
 
 @map_wrap
 def upload_file(bucket, source, destination, s3_ssenc, bufsize):
