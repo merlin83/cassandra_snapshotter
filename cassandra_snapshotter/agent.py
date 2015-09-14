@@ -94,6 +94,7 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
             try:
                 k = Key(bucket)
                 k.key = destination
+                k.set_contents_from_filename(source, cb=percent_cb, num_cb=10)
             except Exception:
                 logger.warn("Error uploading file {!s} to {!s}.\
                     Retry count: {}".format(source, destination, retry_count))
