@@ -14,7 +14,6 @@ try:
 except ImportError:
     from yaml import Loader
 import os
-import sys
 import time
 import glob
 import logging
@@ -83,9 +82,6 @@ def destination_path(s3_base_path, file_path, compressed=True):
     suffix = compressed and '.lzo' or ''
     return '/'.join([s3_base_path, file_path + suffix])
 
-def percent_cb(complete, total):
-    sys.stdout.write('.')
-    sys.stdout.flush()
 
 @map_wrap
 def upload_file(bucket, source, destination, s3_ssenc, bufsize):
@@ -98,15 +94,15 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
             try:
                 k = Key(bucket)
                 k.key = destination
-                k.set_contents_from_filename(source, cb=percent_cb, num_cb=10)
-            except Exception as e:
-                #logger.warn("Error uploading file {!s} to {!s}.\
-                #    Retry count: {}".format(source, destination, retry_count))
+                k.set_contents_from_filename(source)
+            except Exception:
+                logger.warn("Error uploading file {!s} to {!s}.\
+                    Retry count: {}".format(source, destination, retry_count))
                 print("Error uploading file {!s} to {!s}.\
-                        Retry count: {} Error:{}".format(source, destination, retry_count, e))
+                        Retry count: {}".format(source, destination, retry_count))
                 retry_count = retry_count + 1
                 if retry_count >= MAX_RETRY_COUNT:
-                    #logger.exception("Retried too many times uploading file")
+                    logger.exception("Retried too many times uploading file")
                     print("Retried too many times uploading file")
                     raise
             completed = True
