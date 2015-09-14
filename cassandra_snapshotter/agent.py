@@ -87,14 +87,17 @@ def destination_path(s3_base_path, file_path, compressed=True):
 def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     completed = False
     retry_count = 0
+    print("srouce file size={0}".format(os.path.getsize(source)))
     if os.path.getsize(source) <= int(MULTI_PART_UPLOAD_THRESHOLD * MBFACTOR):
-        print("[Single file upload]:source")
+        print("[Single file upload]:{0}".format(source))
         try:
             k = Key(bucket)
             k.key = destination
             print("upload to {}".format(k.key))
+        except Exception:
+            print("Error uploading file {0}".format(source))
         # Use single upload
-    #print("File:{0}".format(source))
+    print("File:{0}".format(source))
     while not completed and retry_count < MAX_RETRY_COUNT:
         mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
         try:
