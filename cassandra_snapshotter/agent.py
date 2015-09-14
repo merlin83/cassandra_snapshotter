@@ -87,19 +87,19 @@ def destination_path(s3_base_path, file_path, compressed=True):
 def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     completed = False
     retry_count = 0
-    # If file size less than MULTI_PART_UPLOAD_THRESHOLD, use single part
-    # upload
+    # If file size less than MULTI_PART_UPLOAD_THRESHOLD,
+    # use single part upload
     if os.path.getsize(source) <= int(MULTI_PART_UPLOAD_THRESHOLD * MBFACTOR):
         while not completed and retry_count < MAX_RETRY_COUNT:
             try:
-                k = Key(bucket)
-                k.key = destination
-                k.set_contents_from_filename(source)
+                k = Key(bucket)  # Initialize S3 bucket object
+                k.key = destination  # Prepend S3 path prior to uploading
+                k.set_contents_from_filename(source, encrypt_key=s3_ssenc)
             except Exception:
                 logger.warn("Error uploading file {!s} to {!s}.\
                     Retry count: {}".format(source, destination, retry_count))
                 print("Error uploading file {!s} to {!s}.\
-                        Retry count: {}".format(source, destination, retry_count))
+                    Retry count: {}".format(source, destination, retry_count))
                 retry_count = retry_count + 1
                 if retry_count >= MAX_RETRY_COUNT:
                     logger.exception("Retried too many times uploading file")
