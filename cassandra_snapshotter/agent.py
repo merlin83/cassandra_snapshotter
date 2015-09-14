@@ -2,6 +2,7 @@ from __future__ import (absolute_import, print_function)
 
 # From system
 from boto.s3.connection import S3Connection
+from boto.s3.key import Key
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -33,6 +34,7 @@ LZOP_BIN = 'lzop'
 MAX_RETRY_COUNT = 3
 SLEEP_TIME = 2
 UPLOAD_TIMEOUT = 600
+MULTI_PART_UPLOAD_THRESHOLD = 20  # If file size > 20M, use multi part upload
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +87,14 @@ def destination_path(s3_base_path, file_path, compressed=True):
 def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     completed = False
     retry_count = 0
-    print("File:{0}".format(source))
+    if os.path.getsize(source) <= int(MULTI_PART_UPLOAD_THRESHOLD * MBFACTOR):
+        print("[Single file upload]:source")
+        try:
+            k = Key(bucket)
+            k.key = destination
+            print("upload to {}".format(k.key))
+        # Use single upload
+    #print("File:{0}".format(source))
     while not completed and retry_count < MAX_RETRY_COUNT:
         mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
         try:
