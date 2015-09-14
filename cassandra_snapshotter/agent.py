@@ -90,13 +90,20 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     # If file size less than MULTI_PART_UPLOAD_THRESHOLD, use single part
     # upload
     if os.path.getsize(source) <= int(MULTI_PART_UPLOAD_THRESHOLD * MBFACTOR):
-        print("[Single file upload]:{0}".format(source))
-        try:
-            k = Key(bucket)
-            k.key = destination
-            print("upload to {}".format(k.key))
-        except Exception:
-            print("Error uploading file {0}".format(source))
+        while not completed and retry_count < MAX_RETRY_COUNT:
+            try:
+                k = Key(bucket)
+                k.key = destination
+            except Exception:
+                logger.warn("Error uploading file {!s} to {!s}.\
+                    Retry count: {}".format(source, destination, retry_count))
+                print("Error uploading file {!s} to {!s}.\
+                    Retry count: {}".format(source, destination, retry_count))
+                retry_count = retry_count + 1
+                if retry_count >= MAX_RETRY_COUNT:
+                    logger.exception("Retried too many times uploading file")
+                    raise
+            completed = True
     else:
         while not completed and retry_count < MAX_RETRY_COUNT:
             mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
