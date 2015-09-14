@@ -95,14 +95,15 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
                 k = Key(bucket)
                 k.key = destination
                 k.set_contents_from_filename(source, cb=percent_cb, num_cb=10)
-            except Exception:
-                logger.warn("Error uploading file {!s} to {!s}.\
-                    Retry count: {}".format(source, destination, retry_count))
+            except Exception as e:
+                #logger.warn("Error uploading file {!s} to {!s}.\
+                #    Retry count: {}".format(source, destination, retry_count))
                 print("Error uploading file {!s} to {!s}.\
-                    Retry count: {}".format(source, destination, retry_count))
+                        Retry count: {} Error:{}".format(source, destination, retry_count, e))
                 retry_count = retry_count + 1
                 if retry_count >= MAX_RETRY_COUNT:
-                    logger.exception("Retried too many times uploading file")
+                    #logger.exception("Retried too many times uploading file")
+                    print("Retried too many times uploading file")
                     raise
             completed = True
     else:
