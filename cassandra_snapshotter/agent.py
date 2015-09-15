@@ -87,43 +87,39 @@ def destination_path(s3_base_path, file_path, compressed=True):
 def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     completed = False
     retry_count = 0
-    # If file size less than MULTI_PART_UPLOAD_THRESHOLD, use single part
-    # upload
+    # If file size less than MULTI_PART_UPLOAD_THRESHOLD,
+    # use single part upload
     if os.path.getsize(source) <= int(MULTI_PART_UPLOAD_THRESHOLD * MBFACTOR):
         while not completed and retry_count < MAX_RETRY_COUNT:
             try:
-                k = Key(bucket)
-                k.key = destination
-                k.set_contents_from_filename(source)
+                k = Key(bucket)  # Initialize S3 bucket object
+                k.key = destination  # Prepend S3 path prior to uploading
+                k.set_contents_from_filename(source, encrypt_key=s3_ssenc)
+                completed = True
             except Exception:
-                logger.warn("Error uploading file {!s} to {!s}.\
-                    Retry count: {}".format(source, destination, retry_count))
                 print("Error uploading file {!s} to {!s}.\
-                        Retry count: {}".format(source, destination, retry_count))
+                    Retry count: {}".format(source, destination, retry_count))
                 retry_count = retry_count + 1
                 if retry_count >= MAX_RETRY_COUNT:
-                    logger.exception("Retried too many times uploading file")
                     print("Retried too many times uploading file")
                     raise
-            completed = True
-    else:
+    else:  # Big file, use multi part upload
         while not completed and retry_count < MAX_RETRY_COUNT:
             mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
             try:
                 for i, chunk in enumerate(compressed_pipe(source, bufsize)):
                     mp.upload_part_from_file(chunk, i+1)
+                mp.complete_upload()  # Finish the upload
+                completed = True
             except Exception:
-                logger.warn("Error uploading file {!s} to {!s}.\
-                    Retry count: {}".format(source, destination, retry_count))
                 print("Error uploading file {!s} to {!s}.\
                     Retry count: {}".format(source, destination, retry_count))
                 cancel_upload(bucket, mp, destination)
                 retry_count = retry_count + 1
                 if retry_count >= MAX_RETRY_COUNT:
-                    logger.exception("Retried too many times uploading file")
+                    print("Retried too many times uploading file")
                     raise
-            mp.complete_upload()
-            completed = True
+
 
 
 @timeout(UPLOAD_TIMEOUT)
