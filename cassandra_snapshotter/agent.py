@@ -67,6 +67,15 @@ def compressed_pipe(path, size):
         yield StringIO(chunk)
 
 
+def compress_file(path):
+    """
+    Return an lzoped file
+    """
+    subprocess.call([LZOP_BIN, path])
+    path = path + '.lzo'
+    return path
+
+
 def get_bucket(
         s3_bucket, aws_access_key_id,
         aws_secret_access_key, s3_connection_host):
@@ -79,6 +88,14 @@ def get_bucket(
 
 
 def destination_path(s3_base_path, file_path, compressed=True):
+    """
+    Set destination file path in AWS S3
+
+    Note:
+        For files smaller than 20M, we do not compress
+    """
+    if os.path.getsize(file_path) <= int(MULTI_PART_UPLOAD_THRESHOLD * MBFACTOR):
+        compressed = False
     suffix = compressed and '.lzo' or ''
     return '/'.join([s3_base_path, file_path + suffix])
 
@@ -90,6 +107,7 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
     # If file size less than MULTI_PART_UPLOAD_THRESHOLD,
     # use single part upload
     if os.path.getsize(source) <= int(MULTI_PART_UPLOAD_THRESHOLD * MBFACTOR):
+        print("[SU] {0}".format(source))
         while not completed and retry_count < MAX_RETRY_COUNT:
             try:
                 k = Key(bucket)  # Initialize S3 bucket object
@@ -104,6 +122,7 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
                     print("Retried too many times uploading file")
                     raise
     else:  # Big file, use multi part upload
+        print("[MU] {0}".format(source))
         while not completed and retry_count < MAX_RETRY_COUNT:
             mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
             try:
@@ -119,7 +138,6 @@ def upload_file(bucket, source, destination, s3_ssenc, bufsize):
                 if retry_count >= MAX_RETRY_COUNT:
                     print("Retried too many times uploading file")
                     raise
-
 
 
 @timeout(UPLOAD_TIMEOUT)
