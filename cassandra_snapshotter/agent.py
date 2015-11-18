@@ -236,9 +236,9 @@ def create_upload_manifest(
             path = os.path.join(*path)
             if len(exclude_tables_list) > 0:
                 for f in glob.glob(os.path.join(path)):
-                # Get the table name
-                # The current format of a file path looks like:
-                # /var/lib/cassandra/data03/system/compaction_history/snapshots/20151102182658/system-compaction_history-jb-6684-Summary.db
+                    # Get the table name
+                    # The current format of a file path looks like:
+                    # /var/lib/cassandra/data03/system/compaction_history/snapshots/20151102182658/system-compaction_history-jb-6684-Summary.db
                     if f.split('/')[-4] not in exclude_tables_list:
                         files.append(f.strip())
             else:
