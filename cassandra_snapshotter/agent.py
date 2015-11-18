@@ -234,13 +234,17 @@ def create_upload_manifest(
             path += ['*']
 
             path = os.path.join(*path)
-            glob_results = '\n'.join(glob.glob(os.path.join(path)))
-            for f in glob_results.split("\n"):
+            #glob_results = '\n'.join(glob.glob(os.path.join(path)))
+            if len(exclude_tables_list) > 0:
+                for f in glob.glob(os.path.join(path)):
+                #for f in glob_results.split("\n"):
                 # Get the table name
                 # The current format of a file path looks like:
                 # /var/lib/cassandra/data03/system/compaction_history/snapshots/20151102182658/system-compaction_history-jb-6684-Summary.db
-                if f.split('/')[-4] not in exclude_tables_list:
-                    files.append(f.strip())
+                    if f.split('/')[-4] not in exclude_tables_list:
+                        files.append(f.strip())
+            else:
+                files.append(f.strip() for f in glob.glob(os.path.join(path)))
 
     with open(manifest_path, 'w') as manifest:
         for f in files:
