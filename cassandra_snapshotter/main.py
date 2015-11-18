@@ -53,7 +53,8 @@ def run_backup(args):
         backup_schema=args.backup_schema,
         buffer_size=args.buffer_size,
         use_sudo=args.use_sudo,
-        connection_pool_size=args.connection_pool_size
+        connection_pool_size=args.connection_pool_size,
+        exclude_tables=args.exclude_tables
     )
 
     if create_snapshot:
@@ -131,6 +132,11 @@ def main():
     backup_parser = subparsers.add_parser('backup', help="Create a snapshot")
 
     # snapshot / backup arguments
+    backup_parser.add_argument(
+        '--exclude-tables',
+        default='',
+        help="Column families you want to skip")
+
     backup_parser.add_argument(
         '--buffer-size',
         default=64,
