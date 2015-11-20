@@ -34,7 +34,7 @@ LZOP_BIN = 'lzop'
 MAX_RETRY_COUNT = 3
 SLEEP_TIME = 2
 UPLOAD_TIMEOUT = 600
-MULTI_PART_UPLOAD_THRESHOLD = 20  # If file size > 20M, use multi part upload
+MULTI_PART_UPLOAD_THRESHOLD = 200000  # If file size > 200G, use multi part upload
 
 logger = logging.getLogger(__name__)
 
