@@ -161,7 +161,9 @@ def get_data_path(conf_path):
     cassandra_configs = {}
     with open(config_file_path, 'r') as f:
         cassandra_configs = load(f, Loader=Loader)
-    data_paths = cassandra_configs['data_file_directories']
+    data_paths = cassandra_configs.get("data_file_directories")
+    if data_paths is None:
+        data_paths = ['/var/lib/cassandra/data']
     return data_paths
 
 def create_upload_manifest(
