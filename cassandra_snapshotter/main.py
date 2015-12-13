@@ -106,6 +106,8 @@ def restore_backup(args):
     else:
         snapshot = snapshots.get_snapshot_by_name(args.backup_name)
 
+    print("Using snapshot: %s" % snapshot)
+
     worker = RestoreWorker(aws_access_key_id=args.aws_access_key_id,
                            aws_secret_access_key=args.aws_secret_access_key,
                            snapshot=snapshot)
