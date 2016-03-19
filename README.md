@@ -6,6 +6,8 @@ A tool to backup cassandra nodes using snapshots and incremental backups on S3
 The scope of this project is to make it easier to backup a cluster to S3 and to combine
 snapshots and incremental backups.
 
+[![Build Status](https://travis-ci.org/tbarbugli/cassandra_snapshotter.svg?branch=master)](https://travis-ci.org/tbarbugli/cassandra_snapshotter) [![PyPI version](https://badge.fury.io/py/cassandra-snapshotter.svg)](http://badge.fury.io/py/cassandra-snapshotter)
+
 How to install
 --------------
 
@@ -36,19 +38,35 @@ You can see the list of parameters available via `cassandra-snapshotter --help`
 
 
 ``` bash
-$ cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path="mycluster-backup" --s3-ssenc --hosts=h1,h2,h3,h4 --user=cassandra
+cassandra-snapshotter --s3-bucket-name=Z \
+                      --s3-bucket-region=eu-west-1 \
+                      --s3-base-path=mycluster \
+                      --aws-access-key-id=X \ # optional
+                      --aws-secret-access-key=Y \ # optional
+                      --s3-ssenc \ # optional
+                      backup \
+                      --hosts=h1,h2,h3,h4 \
+                      --user=cassandra # optional
 ```
 
 
 - connects via ssh to hosts h1,h2,h3,h4 using user cassandra
 - backups up (using snapshots or incremental backups) on the S3 bucket Z
-- backups are stored in /mycluster-backup/
+- backups are stored in /mycluster/
+- if your bucket is in other then us-west-1 region, you should really specify the region in the command line; otherwise weird 'connection reset by peer' errors can appear as you'll be transferring files through us-west-1 over to eg. eu-west-1
+- ```--aws-access-key-id``` and ```--aws-secret-access-key``` are optional. Omitting them will use the instance IAM profile. See http://docs.pythonboto.org/en/latest/boto_config_tut.html for more details.
 - if you wish to use AWS S3 server-side encryption specify ```--s3-ssenc```
 
 ####List existing backups for *mycluster*:####
 
 ``` bash
-$ cassandra-snapshotter --aws-access-key-id=X --aws-secret-access-key=Y --s3-bucket-name=Z --s3-base-path=mycluster list
+cassandra-snapshotter --s3-bucket-name=Z \
+                      --s3-bucket-region=eu-west-1 \
+                      --s3-base-path=mycluster \
+                      --aws-access-key-id=X \ # optional
+                      --aws-secret-access-key=Y \ # optional
+                      --s3-ssenc \ # optional
+                      list
 ```
 
 ####Restore backups for *mycluster*:####
@@ -104,7 +122,7 @@ If you dont want to use incremental backups, or if for some reason you want to c
 
 ###Data retention / Cleanup old snapshots###
 
-Its not in the scope of this project to clean up your S3 buckets.   
+Its not in the scope of this project to clean up your S3 buckets.
 S3 Lifecycle rules allows you do drop or archive to Glacier object stored based on their age.
 
 ###Restore your data###

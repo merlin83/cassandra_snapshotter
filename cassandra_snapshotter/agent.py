@@ -1,12 +1,9 @@
 from __future__ import (absolute_import, print_function)
 
-# From system
+import boto
 from boto.s3.connection import S3Connection
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
 from yaml import load
+
 try:
     # LibYAML based parser and emitter
     from yaml import CLoader as Loader
@@ -20,53 +17,26 @@ import subprocess
 import multiprocessing
 from multiprocessing.dummy import Pool
 
-# From package
-from .timeout import timeout
-from .utils import (add_s3_arguments, base_parser,\
-    map_wrap, get_s3_connection_host)
-
+from cassandra_snapshotter import logging_helper
+from cassandra_snapshotter.timeout import timeout
+from cassandra_snapshotter.utils import (add_s3_arguments, base_parser,
+                                         map_wrap, get_s3_connection_host,
+                                         check_lzop, check_pv, compressed_pipe)
 
 DEFAULT_CONCURRENCY = max(multiprocessing.cpu_count() - 1, 1)
-BUFFER_SIZE = 64         # Default bufsize is 64M
-MBFACTOR = float(1<<20)
-LZOP_BIN = 'lzop'
-MAX_RETRY_COUNT = 3
+BUFFER_SIZE = 64  # Default bufsize is 64M
+MBFACTOR = float(1 << 20)
+MAX_RETRY_COUNT = 4
 SLEEP_TIME = 2
+SLEEP_MULTIPLIER = 3
 UPLOAD_TIMEOUT = 600
+DEFAULT_REDUCED_REDUNDANCY=False
 
-logger = logging.getLogger(__name__)
+logging_helper.configure(
+    format='%(name)-12s %(levelname)-8s %(message)s')
 
-
-def check_lzop():
-    try:
-        subprocess.call([LZOP_BIN, '--version'])
-    except OSError:
-        print("{!s} not found on path".format(LZOP_BIN))
-
-
-def upload_pipe(path, size, compress):
-    """
-    Returns a generator that yields compressed chunks of
-    the given file_path
-
-    compression is done with lzop
-
-    """
-    if compress:
-        lzop = subprocess.Popen(
-            (LZOP_BIN, '--stdout', path),
-            bufsize=size,
-            stdout=subprocess.PIPE
-        )
-        stdout = lzop.stdout
-    else:
-        stdout = open(path, "r")
-
-    while True:
-        chunk = stdout.read(size)
-        if not chunk:
-            break
-        yield StringIO(chunk)
+logger = logging_helper.CassandraSnapshotterLogger('cassandra_snapshotter.agent')
+boto.set_stream_logger('boto', logging.WARNING)
 
 
 def get_bucket(
@@ -85,25 +55,68 @@ def destination_path(s3_base_path, file_path, compressed=True):
     return '/'.join([s3_base_path, file_path + suffix])
 
 
+def s3_progress_update_callback(*args):
+    # TODO: use this to display some nice progress bar
+    pass
+
+
 @map_wrap
-def upload_file(bucket, source, destination, s3_ssenc, bufsize, compress):
-    completed = False
+def upload_file(bucket, source, destination, s3_ssenc, bufsize, reduced_redundancy, rate_limit):
+    mp = None
     retry_count = 0
-    while not completed and retry_count < MAX_RETRY_COUNT:
-        mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
+    sleep_time = SLEEP_TIME
+    while True:
         try:
-            for i, chunk in enumerate(upload_pipe(source, bufsize, compress)):
-                mp.upload_part_from_file(chunk, i+1)
-        except Exception:
-            logger.warn("Error uploading file {!s} to {!s}.\
-                Retry count: {}".format(source, destination, retry_count))
-            cancel_upload(bucket, mp, destination)
-            retry_count = retry_count + 1
-            if retry_count >= MAX_RETRY_COUNT:
-                logger.exception("Retried too many times uploading file")
+            if mp is None:
+                # Initiate the multi-part upload.
+                try:
+                    mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc, reduced_redundancy=reduced_redundancy)
+                    logger.info("Initialized multipart upload for file {!s} to {!s}".format(source, destination))
+                except Exception as exc:
+                    logger.error("Error while initializing multipart upload for file {!s} to {!s}".format(source, destination))
+                    logger.error(exc.message)
+                    raise
+
+            try:
+                for i, chunk in enumerate(compressed_pipe(source, bufsize, rate_limit)):
+                    mp.upload_part_from_file(chunk, i + 1, cb=s3_progress_update_callback)
+            except Exception as exc:
+                logger.error("Error uploading file {!s} to {!s}".format(source, destination))
+                logger.error(exc.message)
                 raise
-        mp.complete_upload()
-        completed = True
+
+            try:
+                mp.complete_upload()
+            except Exception as exc:
+                logger.error("Error completing multipart file upload for file {!s} to {!s}".format(source, destination))
+                logger.error(exc.message)
+                # The multi-part object may be in a bad state.  Extract an error
+                # message if we can, then discard it.
+                try:
+                    logger.error(mp.to_xml())
+                except Exception as exc:
+                    pass
+                cancel_upload(bucket, mp, destination)
+                mp = None
+                raise
+
+            # Successful upload, return the uploaded file.
+            return source
+        except Exception as exc:
+            # Failure anywhere reaches here.
+            retry_count = retry_count + 1
+            if retry_count > MAX_RETRY_COUNT:
+                logger.error("Retried too many times uploading file {!s}".format(source))
+                # Abort the multi-part upload if it was ever initiated.
+                if mp is not None:
+                    cancel_upload(bucket, mp, destination)
+                return None
+            else:
+                logger.info("Sleeping before retry")
+                time.sleep(sleep_time)
+                sleep_time = sleep_time * SLEEP_MULTIPLIER
+                logger.info("Retrying {}/{}".format(retry_count, MAX_RETRY_COUNT))
+                # Go round again.
 
 
 @timeout(UPLOAD_TIMEOUT)
@@ -117,7 +130,8 @@ def cancel_upload(bucket, mp, remote_path):
     sleeps SLEEP_TIME seconds and then makes sure that there are not parts left
     in storage
     """
-    while True:
+    attempts = 0
+    while attempts < 5:
         try:
             time.sleep(SLEEP_TIME)
             mp.cancel_upload()
@@ -127,18 +141,20 @@ def cancel_upload(bucket, mp, remote_path):
                     mp.cancel_upload()
             return
         except Exception:
-            logger.exception("Error while cancelling multipart upload")
+            logger.error("Error while cancelling multipart upload")
+            attempts += 1
 
 
 def put_from_manifest(
         s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
         aws_access_key_id, aws_secret_access_key, manifest,
-        bufsize, concurrency=None, incremental_backups=False, compress=False):
+        bufsize, reduced_redundancy, rate_limit, concurrency=None, incremental_backups=False):
     """
     Uploads files listed in a manifest to amazon S3
     to support larger than 5GB files multipart upload is used (chunks of 60MB)
     files are uploaded compressed with lzop, the .lzo suffix is appended
     """
+    exit_code = 0
     bucket = get_bucket(
         s3_bucket, aws_access_key_id,
         aws_secret_access_key, s3_connection_host)
@@ -146,13 +162,16 @@ def put_from_manifest(
     buffer_size = int(bufsize * MBFACTOR)
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
-    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f, compress), s3_ssenc, buffer_size, compress) for f in files)):
-        pass
-    pool.terminate()
-
-    if incremental_backups:
-        for f in files:
+    for f in pool.imap(upload_file,
+                       ((bucket, f, destination_path(s3_base_path, f), s3_ssenc, buffer_size, reduced_redundancy, rate_limit) for f in files if f)):
+        if f is None:
+            # Upload failed.
+            exit_code = 1
+        elif incremental_backups:
+            # Delete files that were successfully uploaded.
             os.remove(f)
+    pool.terminate()
+    exit(exit_code)
 
 
 def get_data_path(conf_path):
@@ -161,16 +180,15 @@ def get_data_path(conf_path):
     cassandra_configs = {}
     with open(config_file_path, 'r') as f:
         cassandra_configs = load(f, Loader=Loader)
-    data_paths = cassandra_configs.get("data_file_directories")
-    if data_paths is None:
-        data_paths = ['/var/lib/cassandra/data']
+    data_paths = cassandra_configs['data_file_directories']
     return data_paths
+
 
 def create_upload_manifest(
         snapshot_name, snapshot_keyspaces, snapshot_table,
-        conf_path, manifest_path, incremental_backups=False):
+        conf_path, manifest_path, exclude_tables, incremental_backups=False):
     if snapshot_keyspaces:
-        keyspace_globs = snapshot_keyspaces.split()
+        keyspace_globs = snapshot_keyspaces.split(',')
     else:
         keyspace_globs = ['*']
 
@@ -181,6 +199,7 @@ def create_upload_manifest(
 
     data_paths = get_data_path(conf_path)
     files = []
+    exclude_tables_list = exclude_tables.split(',')
     for data_path in data_paths:
         for keyspace_glob in keyspace_globs:
             path = [
@@ -195,8 +214,15 @@ def create_upload_manifest(
             path += ['*']
 
             path = os.path.join(*path)
-            glob_results = '\n'.join(glob.glob(os.path.join(path)))
-            files.extend([f.strip() for f in glob_results.split("\n")])
+            if len(exclude_tables_list) > 0:
+                for f in glob.glob(os.path.join(path)):
+                    # Get the table name
+                    # The current format of a file path looks like:
+                    # /var/lib/cassandra/data03/system/compaction_history/snapshots/20151102182658/system-compaction_history-jb-6684-Summary.db
+                    if f.split('/')[-4] not in exclude_tables_list:
+                        files.append(f.strip())
+            else:
+                files.append(f.strip() for f in glob.glob(os.path.join(path)))
 
     with open(manifest_path, 'w') as manifest:
         manifest.write('\n'.join("%s" % f for f in files))
@@ -234,8 +260,19 @@ def main():
         type=int,
         help="Compress and upload concurrent processes")
 
-    base_parser.add_argument(
-        '--compress', action='store_true', default=False)
+    put_parser.add_argument(
+        '--reduced-redundancy',
+        required=False,
+        default=DEFAULT_REDUCED_REDUNDANCY,
+        action="store_true",
+        help="Compress and upload concurrent processes")
+
+    put_parser.add_argument(
+        '--rate-limit',
+        required=False,
+        default=0,
+        type=int,
+        help="Limit the upload speed to S3 (by using 'pv'). Value expressed in kilobytes (*1024)")
 
     # create-upload-manifest arguments
     manifest_parser.add_argument('--snapshot_name', required=True, type=str)
@@ -245,6 +282,8 @@ def main():
         '--snapshot_keyspaces', default='', required=False, type=str)
     manifest_parser.add_argument(
         '--snapshot_table', required=False, default='', type=str)
+    manifest_parser.add_argument(
+        '--exclude_tables', required=False, type=str)
 
     args = base_parser.parse_args()
     subcommand = args.subcommand
@@ -256,12 +295,16 @@ def main():
             args.snapshot_table,
             args.conf_path,
             args.manifest_path,
+            args.exclude_tables,
             args.incremental_backups
         )
 
     if subcommand == 'put':
-        if args.compress:
-            check_lzop()
+        check_lzop()
+
+        if args.rate_limit > 0:
+            check_pv()
+
         put_from_manifest(
             args.s3_bucket_name,
             get_s3_connection_host(args.s3_bucket_region),
@@ -271,10 +314,14 @@ def main():
             args.aws_secret_access_key,
             args.manifest,
             args.bufsize,
+            args.reduced_redundancy,
+            args.rate_limit,
             args.concurrency,
             args.incremental_backups,
             args.compress
         )
 
+
 if __name__ == '__main__':
-    main()
+    # TODO: if lzop is not available we should fail or run without it
+    check_lzop()

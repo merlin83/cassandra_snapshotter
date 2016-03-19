@@ -16,6 +16,7 @@ from datetime import datetime
 from fabric.api import (env, execute, hide, run, settings, sudo)
 from fabric.context_managers import settings
 from multiprocessing.dummy import Pool
+from cassandra_snapshotter.utils import decompression_pipe
 
 
 class Snapshot(object):
@@ -94,7 +95,7 @@ class Snapshot(object):
 
 
 class RestoreWorker(object):
-    def __init__(self, aws_access_key_id, aws_secret_access_key, snapshot):
+    def __init__(self, aws_access_key_id, aws_secret_access_key, snapshot, cassandra_bin_dir, cassandra_data_dir):
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_access_key_id = aws_access_key_id
         self.s3connection = S3Connection(
@@ -102,6 +103,8 @@ class RestoreWorker(object):
             aws_secret_access_key=self.aws_secret_access_key)
         self.snapshot = snapshot
         self.keyspace_table_matcher = None
+        self.cassandra_bin_dir = cassandra_bin_dir
+        self.cassandra_data_dir = cassandra_data_dir
 
     def restore(self, keyspace, table, hosts, target_hosts, download_only=False):
         # TODO:
@@ -117,7 +120,7 @@ class RestoreWorker(object):
         bucket = self.s3connection.get_bucket(
             self.snapshot.s3_bucket, validate=False)
 
-        matcher_string = "(%(hosts)s).*/(%(keyspace)s)/(%(table)s)/" % dict(
+        matcher_string = "(%(hosts)s).*/(%(keyspace)s)/(%(table)s-[A-Za-z0-9]*)/" % dict(
             hosts='|'.join(hosts), keyspace=keyspace, table=table)
         self.keyspace_table_matcher = re.compile(matcher_string)
 
@@ -132,37 +135,32 @@ class RestoreWorker(object):
             tables.add(r.group(3))
             keys.append(k)
 
-        self._delete_old_dir_and_create_new(keyspace, tables)
-
+        keyspace_path = "/".join([self.cassandra_data_dir, "data", keyspace])
+        self._delete_old_dir_and_create_new(keyspace_path, tables)
         total_size = reduce(lambda s, k: s + k.size, keys, 0)
 
         logging.info("Found %(files_count)d files, with total size \
-            of %(size)s." % dict(
-                files_count=len(keys),
-                size=self._human_size(total_size)))
+            of %(size)s." % dict(files_count=len(keys),
+                                 size=self._human_size(total_size)))
         print("Found %(files_count)d files, with total size \
-            of %(size)s." % dict(
-                files_count=len(keys),
-                size=self._human_size(total_size)))
+            of %(size)s." % dict(files_count=len(keys),
+                                 size=self._human_size(total_size)))
 
         self._download_keys(keys, total_size)
 
         logging.info("Finished downloading...")
 
-        if download_only:
-            sys.exit()
+        self._run_sstableloader(keyspace_path, tables, target_hosts, self.cassandra_bin_dir)
 
-        self._run_sstableloader(keyspace, tables, target_hosts)
+    def _delete_old_dir_and_create_new(self, keyspace_path, tables):
 
-    def _delete_old_dir_and_create_new(self, keyspace, tables):
-        keyspace_path = "./{!s}".format(keyspace)
         if os.path.exists(keyspace_path) and os.path.isdir(keyspace_path):
-            logging.warning("Deleteing directory ({!s})...".format(
+            logging.warning("Deleting directory ({!s})...".format(
                 keyspace_path))
             shutil.rmtree(keyspace_path)
 
         for table in tables:
-            path = "./{!s}/{!s}".format(keyspace, table)
+            path = "./{!s}/{!s}".format(keyspace_path, table)
             if not os.path.exists(path):
                 os.makedirs(path)
 
@@ -180,11 +178,11 @@ class RestoreWorker(object):
             progress_string = "{!s} / {!s} ({:.2f})".format(
                 self._human_size(read_bytes),
                 self._human_size(total_size),
-                (read_bytes/float(total_size))*100.0)
+                (read_bytes / float(total_size)) * 100.0)
             width = len(progress_string)
             padding = ""
             if width < old_width:
-                padding = " "*(width-old_width)
+                padding = " " * (width - old_width)
             progress_string = "{!s}{!s}\r".format(progress_string, padding)
 
             sys.stderr.write(progress_string)
@@ -194,7 +192,20 @@ class RestoreWorker(object):
         filename = "./{!s}/{!s}/{!s}_{!s}".format(
             r.group(2), r.group(3),
             key.name.split('/')[2], key.name.split('/')[-1])
-        key.get_contents_to_filename(filename)
+
+        if filename.endswith('.lzo'):
+            filename = re.sub('\.lzo$', '', filename)
+            lzop_pipe = decompression_pipe(filename)
+            key.open_read()
+            for chunk in key:
+                lzop_pipe.stdin.write(chunk)
+            key.close()
+            out, err = lzop_pipe.communicate()
+            errcode = lzop_pipe.returncode
+            if errcode != 0:
+                logging.exception("lzop Out: %s\nError:%s\nExit Code %d: " % (out, err, errcode))
+        else:
+            key.get_contents_to_filename(filename)
 
         return key.size
 
@@ -205,15 +216,16 @@ class RestoreWorker(object):
             size /= 1024.0
         return "{:3.1f}{!s}".format(size, 'TB')
 
-    def _run_sstableloader(self, keyspace, tables, target_hosts):
-        # TODO: get path to sstableloader
+    def _run_sstableloader(self, keyspace_path, tables, target_hosts, cassandra_bin_dir):
+        sstableloader = "{!s}/sstableloader".format(cassandra_bin_dir)
         for table in tables:
-            command = 'sstableloader --nodes %(hosts)s -v \
-                %(keyspace)s/%(table)s' % dict(
-                    hosts=','.join(target_hosts),
-                    keyspace=keyspace, table=table)
+            path = "/".join([keyspace_path, table])
+            if not os.path.exists(path):
+                os.makedirs(path)
+            command = '%(sstableloader)s --nodes %(hosts)s -v \
+                %(keyspace_path)s/%(table)s' % dict(sstableloader=sstableloader, hosts=','.join(target_hosts),
+                                                    keyspace_path=keyspace_path, table=table)
             logging.info("invoking: {!s}".format(command))
-
             os.system(command)
 
 
@@ -223,7 +235,7 @@ class BackupWorker(object):
         - requests cassandra to create new backups
         - uploads backup files to S3
         - clears backup files from nodes
-        - updates backup meta informations
+        - updates backup meta information
 
     When performing a new snapshot the manifest of the snapshot is
     uploaded to S3 for later use.
@@ -240,63 +252,75 @@ class BackupWorker(object):
                  aws_access_key_id, s3_bucket_region, s3_ssenc,
                  s3_connection_host, cassandra_conf_path, use_sudo,
                  nodetool_path, cassandra_bin_dir, backup_schema,
-                 buffer_size, connection_pool_size=12):
+                 buffer_size, exclude_tables, rate_limit, connection_pool_size=12,
+                 reduced_redundancy=False):
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_access_key_id = aws_access_key_id
         self.s3_bucket_region = s3_bucket_region
         self.s3_ssenc = s3_ssenc
         self.s3_connection_host = s3_connection_host
         self.cassandra_conf_path = cassandra_conf_path
-        self.nodetool_path = nodetool_path or \
-            "{!s}/nodetool".format(cassandra_bin_dir)
-        self.cassandra_cli_path = "{!s}/cassandra-cli".format(cassandra_bin_dir)
+        self.nodetool_path = nodetool_path or "{!s}/nodetool".format(cassandra_bin_dir)
+        self.cqlsh_path = "{!s}/cqlsh".format(cassandra_bin_dir)
         self.backup_schema = backup_schema
         self.connection_pool_size = connection_pool_size
         self.buffer_size = buffer_size
+        self.reduced_redundancy = reduced_redundancy
+        self.rate_limit = rate_limit
         if isinstance(use_sudo, basestring):
             self.use_sudo = bool(strtobool(use_sudo))
         else:
             self.use_sudo = use_sudo
+        self.exclude_tables = exclude_tables
 
     def get_current_node_hostname(self):
         return env.host_string
 
     def upload_node_backups(self, snapshot, incremental_backups):
-        prefix = '/'.join(snapshot.base_path.split(
-            '/') + [self.get_current_node_hostname()])
+        prefix = '/'.join(snapshot.base_path.split('/') + [self.get_current_node_hostname()])
 
         manifest_path = '/tmp/backupmanifest'
-        manifest_command = "cassandra-snapshotter-agent \
-            %(incremental_backups)s create-upload-manifest \
-            --manifest_path=%(manifest_path)s \
-            --snapshot_name=%(snapshot_name)s \
-            --snapshot_keyspaces=%(snapshot_keyspaces)s \
-            --snapshot_table=%(snapshot_table)s \
-            --conf_path=%(conf_path)s"
+        manifest_command = "cassandra-snapshotter-agent " \
+                           "%(incremental_backups)s create-upload-manifest " \
+                           "--manifest_path=%(manifest_path)s " \
+                           "--snapshot_name=%(snapshot_name)s " \
+                           "--snapshot_keyspaces=%(snapshot_keyspaces)s " \
+                           "--snapshot_table=%(snapshot_table)s " \
+                           "--conf_path=%(conf_path)s " \
+                           "--exclude_tables=%(exclude_tables)s"
         cmd = manifest_command % dict(
             manifest_path=manifest_path,
             snapshot_name=snapshot.name,
-            snapshot_keyspaces=snapshot.keyspaces,
+            snapshot_keyspaces=','.join(snapshot.keyspaces or ''),
             snapshot_table=snapshot.table,
             conf_path=self.cassandra_conf_path,
-            incremental_backups=incremental_backups and\
-                '--incremental_backups' or ''
+            exclude_tables=self.exclude_tables,
+            incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
         if self.use_sudo:
             sudo(cmd)
         else:
             run(cmd)
 
-        upload_command = "cassandra-snapshotter-agent %(incremental_backups)s \
-            put \
-            --aws-access-key-id=%(key)s \
-            --aws-secret-access-key=%(secret)s \
-            --s3-bucket-name=%(bucket)s \
-            --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s \
-            --s3-base-path=%(prefix)s \
-            --manifest=%(manifest)s \
-            --bufsize=%(bufsize)s \
-            --concurrency=16"
+        upload_command = "cassandra-snapshotter-agent %(incremental_backups)s " \
+                         "put " \
+                         "--s3-bucket-name=%(bucket)s " \
+                         "--s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s " \
+                         "--s3-base-path=%(prefix)s " \
+                         "--manifest=%(manifest)s " \
+                         "--bufsize=%(bufsize)s " \
+                         "--concurrency=4"
+
+        if self.reduced_redundancy:
+            upload_command += " --reduced-redundancy"
+
+        if self.rate_limit > 0:
+            upload_command += " --rate-limit=%(rate_limit)s"
+
+        if self.aws_access_key_id and self.aws_secret_access_key:
+            upload_command += " --aws-access-key-id=%(key)s " \
+                              "--aws-secret-access-key=%(secret)s"
+
         cmd = upload_command % dict(
             bucket=snapshot.s3_bucket,
             s3_bucket_region=self.s3_bucket_region,
@@ -306,8 +330,8 @@ class BackupWorker(object):
             secret=self.aws_secret_access_key,
             manifest=manifest_path,
             bufsize=self.buffer_size,
-            incremental_backups=incremental_backups and\
-                '--incremental_backups' or ''
+            rate_limit=self.rate_limit,
+            incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
         if self.use_sudo:
             sudo(cmd)
@@ -348,21 +372,17 @@ class BackupWorker(object):
         return ring_description
 
     def get_keyspace_schema(self, keyspace=None):
-        output = ""
         with settings(host_string=env.hosts[0]):
             with hide('output'):
-                cmd = "echo -e 'show schema;\n' | {!s}".format(
-                    self.cassandra_cli_path)
+                cmd = "echo 'DESCRIBE SCHEMA;' | {!s}".format(self.cqlsh_path)
                 if keyspace:
-                    cmd = "echo -e 'show schema;\n' | {!s} -k {!s}".format(
-                        self.cassandra_cli_path, keyspace)
+                    cmd = "echo 'DESCRIBE KEYSPACE {!s};' | {!s} -k {!s}".format(
+                        keyspace, self.cqlsh_path, keyspace)
                 if self.use_sudo:
                     output = sudo(cmd)
                 else:
                     output = run(cmd)
-        schema = '\n'.join([l for l in output.split("\n") if re.match(
-            r'(create|use| )', l)])
-        return schema
+        return output
 
     def write_on_S3(self, bucket_name, path, content):
         conn = S3Connection(
@@ -381,16 +401,16 @@ class BackupWorker(object):
 
     def write_schema(self, snapshot):
         if snapshot.keyspaces:
-            for ks in snapshot.keyspaces.split(','):
+            for ks in snapshot.keyspaces:
                 logging.info("Writing schema for keyspace {!s}".format(ks))
                 content = self.get_keyspace_schema(ks)
                 schema_path = '/'.join(
-                    [snapshot.base_path, "schema_{!s}.cdl".format(ks)])
+                    [snapshot.base_path, "schema_{!s}.cql".format(ks)])
                 self.write_on_S3(snapshot.s3_bucket, schema_path, content)
         else:
             logging.info("Writing schema for all keyspaces")
             content = self.get_keyspace_schema()
-            schema_path = '/'.join([snapshot.base_path, "schema.cdl"])
+            schema_path = '/'.join([snapshot.base_path, "schema.cql"])
             self.write_on_S3(snapshot.s3_bucket, schema_path, content)
 
     def write_snapshot_manifest(self, snapshot):
@@ -406,29 +426,57 @@ class BackupWorker(object):
     def node_start_backup(self, snapshot, incremental_backups):
         """Runs snapshot command on a cassandra node"""
 
-        if snapshot.table:
-            table_param = "-cf {!s}".format(snapshot.table)
-        else:
-            table_param = ''
+        def run_cmd(cmd):
+            with hide('running', 'stdout', 'stderr'):
+                if self.use_sudo:
+                    sudo(cmd)
+                else:
+                    run(cmd)
 
         if incremental_backups:
-            backup_command = "%(nodetool)s flush %(keyspaces)s %(table_param)s"
-        else:
-            backup_command = "%(nodetool)s snapshot -t %(snapshot)s \
-                %(keyspaces)s %(table_param)s"
+            backup_command = "%(nodetool)s flush %(keyspace)s %(tables)s"
 
-        cmd = backup_command % dict(
-            nodetool=self.nodetool_path,
-            snapshot=snapshot.name,
-            keyspaces=snapshot.keyspaces or '',
-            table_param=table_param
-        )
-
-        with hide('running', 'stdout', 'stderr'):
-            if self.use_sudo:
-                sudo(cmd)
+            if snapshot.keyspaces:
+                # flush can only take one keyspace at a time.
+                for keyspace in snapshot.keyspaces:
+                    cmd = backup_command % dict(
+                        nodetool=self.nodetool_path,
+                        keyspace=keyspace,
+                        tables=snapshot.table or ''
+                    )
+                    run_cmd(cmd)
             else:
-                run(cmd)
+                # If no keyspace then can't provide a table either.
+                cmd = backup_command % dict(
+                    nodetool=self.nodetool_path,
+                    keyspace='',
+                    tables=''
+                )
+                run_cmd(cmd)
+
+        else:
+            backup_command = "%(nodetool)s snapshot %(table_param)s \
+                -t %(snapshot)s %(keyspaces)s"
+
+            if snapshot.table:
+                # Only one keyspace can be specified along with a column family.
+                table_param = "-cf {!s}".format(snapshot.table)
+                for keyspace in snapshot.keyspaces:
+                    cmd = backup_command % dict(
+                        nodetool=self.nodetool_path,
+                        table_param=table_param,
+                        snapshot=snapshot.name,
+                        keyspaces=keyspace
+                    )
+                    run_cmd(cmd)
+            else:
+                cmd = backup_command % dict(
+                    nodetool=self.nodetool_path,
+                    table_param='',
+                    snapshot=snapshot.name,
+                    keyspaces=' '.join(snapshot.keyspaces or '')
+                )
+                run_cmd(cmd)
 
     def upload_cluster_backups(self, snapshot, incremental_backups):
         logging.info("Uploading backups")
@@ -454,10 +502,10 @@ class BackupWorker(object):
 
 
 class SnapshotCollection(object):
-
     def __init__(
             self, aws_access_key_id,
-            aws_secret_access_key, base_path, s3_bucket):
+            aws_secret_access_key, base_path, s3_bucket, s3_connection_host):
+        self.s3_connection_host = s3_connection_host
         self.s3_bucket = s3_bucket
         self.base_path = base_path
         self.snapshots = None
@@ -468,7 +516,7 @@ class SnapshotCollection(object):
         if self.snapshots:
             return
 
-        conn = S3Connection(self.aws_access_key_id, self.aws_secret_access_key)
+        conn = S3Connection(self.aws_access_key_id, self.aws_secret_access_key, host=self.s3_connection_host)
         bucket = conn.get_bucket(self.s3_bucket, validate=False)
         self.snapshots = []
         prefix = self.base_path
